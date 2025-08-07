@@ -1,0 +1,179 @@
+// =================================================================
+// Schema Prisma Completo para a Plataforma "Sempre Perto"
+// Versão Final Corrigida - Abrange todas as funcionalidades
+// =================================================================
+
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id            String      @id @default(cuid())
+  name          String?
+  email         String      @unique
+  emailVerified DateTime?
+  image         String?
+  telefone      String?
+  role          Role        @default(USER)
+
+  accounts      Account[]
+  sessions      Session[]
+  projetos      Projeto[]
+  dispositivos  Dispositivo[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Projeto {
+  id           String        @id @default(cuid())
+  name         String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  dispositivos Dispositivo[]
+}
+
+model Dispositivo {
+  id                      String    @id @default(cuid())
+  name                    String
+  tokenOta                String    @unique
+  modelo                  String    @default("XIAO ESP32S3")
+  enableVision            Boolean   @default(false)
+  enableAdvancedCommands  Boolean   @default(false)
+  targetFirmware          String?
+  status                  String    @default("offline")
+  lastActivity            DateTime?
+  otaUpdatePending        Boolean   @default(false)
+  lastCommand             String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  agendamentos            Agendamento[]
+  sensorReadings          SensorReading[]
+
+  projetoId               String
+  projeto                 Projeto   @relation(fields: [projetoId], references: [id])
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id])
+
+  pinMappings             PinMapping[]
+  imageCaptures           ImageCapture[]
+  audioLogs               AudioLog[]
+
+  enableMqtt              Boolean   @default(false)
+  mqttBrokerHost          String?
+  mqttBrokerPort          Int?
+  mqttUsername            String?
+  mqttPassword            String?
+  mqttPublishTopic        String?   @default("sempreperto/dispositivo/{tokenOta}/status")
+  mqttSubscribeTopic      String?   @default("sempreperto/dispositivo/{tokenOta}/comandos")
+}
+
+model PinMapping {
+  id             String       @id @default(cuid())
+  pinNumber      Int
+  pinAlias       String
+  deviceType     DeviceType
+  currentState   String       @default("OFF")
+  dispositivoId  String
+  dispositivo    Dispositivo  @relation(fields: [dispositivoId], references: [id])
+  agendamentos   Agendamento[]
+
+  @@unique([dispositivoId, pinNumber])
+}
+
+model ImageCapture {
+  id             String       @id @default(cuid())
+  filePath       String
+  capturedAt     DateTime     @default(now())
+  dispositivoId  String
+  dispositivo    Dispositivo  @relation(fields: [dispositivoId], references: [id])
+}
+
+model AudioLog {
+  id              String       @id @default(cuid())
+  filePath        String
+  transcribedText String?
+  processedAt     DateTime     @default(now())
+  dispositivoId   String
+  dispositivo     Dispositivo  @relation(fields: [dispositivoId], references: [id])
+}
+
+enum DeviceType {
+  RELAY
+  LED
+  DIGITAL_SENSOR
+  ANALOG_SENSOR
+  CAMERA
+  MICROPHONE
+  I2C_DEVICE
+  SPI_DEVICE
+}
+
+enum ActionType {
+  ON
+  OFF
+}
+
+model Agendamento {
+  id              String      @id @default(cuid())
+  cronExpression  String
+  action          ActionType
+  duration        Int?
+  enabled         Boolean     @default(true)
+  dispositivo     Dispositivo @relation(fields: [dispositivoId], references: [id], onDelete: Cascade)
+  dispositivoId   String
+  pinMapping      PinMapping  @relation(fields: [pinMappingId], references: [id], onDelete: Cascade)
+  pinMappingId    String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model SensorReading {
+  id            String        @id @default(cuid())
+  type          String
+  value         Float
+  unit          String
+  timestamp     DateTime      @default(now())
+  dispositivo   Dispositivo   @relation(fields: [dispositivoId], references: [id], onDelete: Cascade)
+  dispositivoId String
+
+  @@index([dispositivoId, timestamp])
+}
